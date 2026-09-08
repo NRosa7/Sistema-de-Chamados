@@ -1,0 +1,75 @@
+<script>
+const Utils = {
+  formatDateTime(dateInput) {
+    if (!dateInput) return '-';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return dateInput;
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  },
+  formatDate(dateInput) {
+    if (!dateInput) return '-';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return dateInput;
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+  },
+  toInputDateValue(dateInput) {
+    if (!dateInput) return '';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  },
+  getRelativeTime(dateInput) {
+    if (!dateInput) return '';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return dateInput;
+    const diffMin = Math.floor((new Date() - date) / 60000);
+    if (diffMin < 1) return 'Agora mesmo';
+    if (diffMin < 60) return `há ${diffMin} min`;
+    if (diffMin < 1440) return `há ${Math.floor(diffMin / 60)} h`;
+    if (diffMin < 2880) return 'Ontem';
+    if (diffMin < 43200) return `há ${Math.floor(diffMin / 1440)} dias`;
+    return this.formatDate(dateInput);
+  },
+  isOverdue(dataPrevisao, status) {
+    if (!dataPrevisao || status === 'RESOLVIDO' || status === 'CANCELADO') return false;
+    const previsao = new Date(dataPrevisao);
+    if (isNaN(previsao.getTime())) return false;
+    const hoje = new Date();
+    hoje.setHours(23, 59, 59, 999);
+    return previsao < hoje;
+  },
+  escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  },
+  getPriorityClass(p) {
+    return p && p.toLowerCase() === 'alta' ? 'priority-alta' : p && p.toLowerCase().includes('m') ? 'priority-media' : 'priority-baixa';
+  },
+  getCategoryIcon(cat) {
+    const c = (cat || '').toLowerCase();
+    if (c.includes('cigam') || c.includes('erp')) return '🏭';
+    if (c.includes('impressora')) return '🖨️';
+    if (c.includes('internet') || c.includes('rede')) return '🌐';
+    if (c.includes('login/senha')) return '🔒';
+    if (c.includes('email') || c.includes('e-mail')) return '✉️';
+    if (c.includes('drive') || c.includes('arquivos')) return '☁️';
+    if (c.includes('planilha')) return '📊';
+    if (c.includes('licenca') || c.includes('licença')) return '📄';
+    if (c.includes('camera') || c.includes('câmera')) return '🎥';
+    if (c.includes('voz') || c.includes('maaxtalk') || c.includes('telefone') || c.includes('negócio') || c.includes('negocio')) return '📞';
+    if (c.includes('nota') || c.includes('pré-nota') || c.includes('pre nota')) return '📝';
+    if (c.includes('melhorias')) return '📈';
+    if (c.includes('celular/notebook')) return '📱💻';
+    return '📁';
+  },
+  generateId(num) {
+    return `OS ${num}`;
+  },
+  debounce(func, wait = 300) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  }
+};
+</script>

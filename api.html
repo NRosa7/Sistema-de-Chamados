@@ -1,0 +1,113 @@
+<script>
+const Api = {
+  isGoogleAppsScript() {
+    return typeof google !== 'undefined' && google.script && typeof google.script.run === 'object';
+  },
+
+  async requestJson(url, options = {}) {
+    const response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Erro na requisição local');
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    return response.text();
+  },
+
+  buscarUsuarioAtual() {
+    return new Promise((resolve) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(() => resolve('Usuário'))
+          .getUsuarioAtual();
+      } else {
+        this.requestJson('/api/usuario').then(resolve).catch(() => resolve('admin@geomembrana.com.br'));
+      }
+    });
+  },
+
+  buscarChamados() {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(data => {
+            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+            resolve(parsed || []);
+          })
+          .withFailureHandler(err => reject(err))
+          .getTodosChamados();
+      } else {
+        this.requestJson('/api/chamados').then(resolve).catch(reject);
+      }
+    });
+  },
+
+  salvarChamado(chamadoAtualizado) {
+    return new Promise((resolve, reject) => {
+      chamadoAtualizado.dataAtualizacao = new Date().toISOString();
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .atualizarChamado(chamadoAtualizado);
+      } else {
+        this.requestJson('/api/chamados', {
+          method: 'POST',
+          body: JSON.stringify(chamadoAtualizado)
+        }).then(resolve).catch(reject);
+      }
+    });
+  },
+
+  buscarResponsaveis() {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .getResponsaveis();
+      } else {
+        this.requestJson('/api/responsaveis').then(resolve).catch(reject);
+      }
+    });
+  },
+
+  buscarCategorias() {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .getCategorias();
+      } else {
+        this.requestJson('/api/categorias').then(resolve).catch(reject);
+      }
+    });
+  },
+
+  excluirChamado(id) {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .excluirChamado(id);
+      } else {
+        this.requestJson(`/api/chamados/${encodeURIComponent(id)}`, { method: 'DELETE' })
+          .then(resolve)
+          .catch(reject);
+      }
+    });
+  }
+};
+</script>

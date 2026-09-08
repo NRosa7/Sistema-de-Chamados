@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geomembrana - Help Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="brand-container">
+      <img src="https://i.postimg.cc/Y2xn2fcd/Logo-Geomembrana-HORIZONTAL-png.png" alt="Geomembrana Geossintéticos" class="brand-logo-image">
+      <div class="brand-info">
+        <h1>Help Desk Geomembrana</h1>
+        <div class="brand-subtitle">
+          <span>Geomembrana Geossintéticos Soluções Ltda.</span>
+          <span class="domain-badge">@geomembrana.com.br</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="sync-info">
+        <span>Sincronizando... 🟢 Auto</span>
+      </div>
+      <a href="formulario.html" class="btn btn-secondary" title="Abrir novo chamado" style="text-decoration: none;">
+        <span>➕</span> Novo Chamado
+      </a>
+      <button id="btnRefresh" class="btn btn-secondary" title="Sincronizar Manualmente">
+        <span id="iconSync">🔄</span> Sincronizar
+      </button>
+    </div>
+  </header>
+
+  <section class="toolbar-section">
+    <div class="toolbar-top">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Buscar por título, ID ou solicitante...">
+      </div>
+      
+      <div class="filters-group">
+        <select id="filterResponsavel" class="filter-select">
+          <option value="">Responsáveis</option>
+        </select>
+        
+        <select id="filterSetor" class="filter-select">
+          <option value="">Setores</option>
+        </select>
+
+        <select id="filterCategoria" class="filter-select">
+          <option value="">Categorias</option>
+        </select>
+        
+        <select id="filterPrioridade" class="filter-select">
+          <option value="">Todas as Prioridades</option>
+          <option value="Alta">Alta</option>
+          <option value="Média">Média</option>
+          <option value="Baixa">Baixa</option>
+        </select>
+        
+        <button id="btnFilterOverdue" class="filter-toggle-btn" title="Filtrar chamados vencidos">
+          <span>⚠️</span> Vencidos
+        </button>
+        <button id="btnClearFilters" class="btn btn-outline" style="padding: 0.55rem 0.8rem;" title="Limpar todos os filtros">
+          🚫 Limpar
+        </button>
+      </div>
+
+      <div class="stats-summary">
+        <div class="stat-item"><span>Total:</span><span id="statTotal" class="stat-value">0</span></div>
+        <div class="stat-item"><span>Exibidos:</span><span id="statExibidos" class="stat-value">0</span></div>
+        <div class="stat-item"><span>Vencidos:</span><span id="statVencidos" class="stat-value">0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <main class="kanban-container">
+    <div class="kanban-column" id="col-novo" data-status="NOVO">
+      <div class="column-header"><div class="column-title-group"><span class="column-dot"></span><h3 class="column-title">NOVO</h3></div><span class="column-count">0</span></div>
+      <div class="kanban-column-body"></div>
+    </div>
+    <div class="kanban-column" id="col-em-atendimento" data-status="EM ATENDIMENTO">
+      <div class="column-header"><div class="column-title-group"><span class="column-dot"></span><h3 class="column-title">EM ATENDIMENTO</h3></div><span class="column-count">0</span></div>
+      <div class="kanban-column-body"></div>
+    </div>
+    <div class="kanban-column" id="col-aguardando-retorno" data-status="AGUARDANDO RETORNO">
+      <div class="column-header"><div class="column-title-group"><span class="column-dot"></span><h3 class="column-title">AGUARDANDO RETORNO</h3></div><span class="column-count">0</span></div>
+      <div class="kanban-column-body"></div>
+    </div>
+    <div class="kanban-column" id="col-projeto" data-status="PROJETO">
+      <div class="column-header"><div class="column-title-group"><span class="column-dot"></span><h3 class="column-title">PROJETO</h3></div><span class="column-count">0</span></div>
+      <div class="kanban-column-body"></div>
+    </div>
+    <div class="kanban-column" id="col-resolvido" data-status="RESOLVIDO">
+      <div class="column-header"><div class="column-title-group"><span class="column-dot"></span><h3 class="column-title">RESOLVIDO</h3></div><span class="column-count">0</span></div>
+      <div class="kanban-column-body"></div>
+    </div>
+    <div class="kanban-column" id="col-cancelado" data-status="CANCELADO">
+      <div class="column-header"><div class="column-title-group"><span class="column-dot"></span><h3 class="column-title">CANCELADO</h3></div><span class="column-count">0</span></div>
+      <div class="kanban-column-body"></div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="modalDetalhesChamado">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-header-info">
+          <span class="modal-id-tag" id="modalIdTag">OS 0</span>
+          <h2 class="modal-title-text" id="modalIdTitle">Detalhes do Chamado</h2>
+          <span id="modalStatusBadge" class="status-pill status-novo">NOVO</span>
+        </div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label class="form-label" for="editTitulo">Título do Chamado</label>
+            <input type="text" id="editTitulo" class="form-input">
+          </div>
+          <div class="form-group full-width">
+            <label class="form-label" for="editDescricao">Descrição Detalhada</label>
+            <textarea id="editDescricao" class="form-textarea" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editSolicitanteNome">Nome do Solicitante</label>
+            <input type="text" id="editSolicitanteNome" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editSolicitanteEmail">E-mail do Solicitante</label>
+            <input type="email" id="editSolicitanteEmail" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editSolicitanteSetor">Setor</label>
+            <input type="text" id="editSolicitanteSetor" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editCategoria">Categoria</label>
+            <select id="editCategoria" class="form-select"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editPrioridade">Prioridade</label>
+            <select id="editPrioridade" class="form-select">
+              <option value="Alta">Alta</option>
+              <option value="Média">Média</option>
+              <option value="Baixa">Baixa</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editStatus">Status Atual</label>
+            <select id="editStatus" class="form-select">
+              <option value="NOVO">NOVO</option>
+              <option value="EM ATENDIMENTO">EM ATENDIMENTO</option>
+              <option value="AGUARDANDO RETORNO">AGUARDANDO RETORNO</option>
+              <option value="PROJETO">PROJETO</option>
+              <option value="RESOLVIDO">RESOLVIDO</option>
+              <option value="CANCELADO">CANCELADO</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editResponsavel">Responsável Atribuído</label>
+            <select id="editResponsavel" class="form-select"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editPrevisao">Data de Previsão</label>
+            <input type="date" id="editPrevisao" class="form-input">
+          </div>
+          <div class="form-group full-width">
+            <label class="form-label" for="editObservacoes">Observações Internas (TI)</label>
+            <textarea id="editObservacoes" class="form-textarea" placeholder="Anotações internas do atendimento..." rows="2"></textarea>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted); background:var(--bg-main); padding:8px 12px; border-radius:6px;">
+          <span>Criado em: <strong id="modalDataCriacao">-</strong></span>
+          <span>Última atualização: <strong id="modalDataAtualizacao">-</strong></span>
+        </div>
+
+        <div class="historico-section">
+          <h4 class="section-title">📜 Histórico de Alterações</h4>
+          <div class="timeline-list" id="modalHistoricoList"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; width: 100%;">
+        <button class="btn btn-outline" id="btnExcluirChamado" style="color: #EF4444; border-color: #EF4444;">🗑️ Excluir</button>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-outline modal-close-btn">Cancelar</button>
+          <button class="btn btn-primary" id="btnSalvarDetalhes">💾 Salvar Alterações</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    if (!(window.google && window.google.script && window.google.script.run)) {
+      const loadFragment = async (filePath, type) => {
+        const response = await fetch(filePath, { cache: 'no-store' });
+        const text = await response.text();
+        const clean = text.replace(/^<script>|<\/script>$/gi, '').replace(/^<style>|<\/style>$/gi, '');
+
+        if (type === 'style') {
+          const styleTag = document.createElement('style');
+          styleTag.textContent = clean;
+          document.head.appendChild(styleTag);
+          return;
+        }
+
+        const scriptTag = document.createElement('script');
+        scriptTag.textContent = clean;
+        document.body.appendChild(scriptTag);
+      };
+
+      (async () => {
+        await loadFragment('style.html', 'style');
+        await loadFragment('utils.html', 'script');
+        await loadFragment('api.html', 'script');
+        await loadFragment('modal.html', 'script');
+        await loadFragment('app.html', 'script');
+      })().catch((error) => {
+        console.error('Erro ao carregar fragmentos do sistema:', error);
+      });
+    }
+  </script>
+
+</body>
+</html>
