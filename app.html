@@ -1,0 +1,468 @@
+<script>
+window.CustomDialogs = {
+  showResolveOptions: function(chamadoId) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.6);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s ease;';
+      
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#fff;padding:24px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 10px 25px rgba(0,0,0,0.2);display:flex;flex-direction:column;gap:15px;font-family:Inter,sans-serif;transform:scale(0.95);transition:transform 0.2s ease;';
+      
+      box.innerHTML = `
+        <h3 style="margin:0;color:#047857;font-size:1.15rem;font-weight:700;">✅ Concluir ${chamadoId}</h3>
+        <p style="margin:0;font-size:0.9rem;color:#475569;line-height:1.4;margin-bottom:4px;">Selecione como deseja registrar a conclusão deste chamado:</p>
+        
+        <div id="commentBox" style="display:none;flex-direction:column;gap:6px;">
+          <label style="font-size:0.8rem;font-weight:600;color:#1e293b;">Comentário no E-mail (Opcional)</label>
+          <textarea id="customResolveComment" rows="3" placeholder="Digite aqui a solução para o usuário..." style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;resize:vertical;font-family:inherit;"></textarea>
+          <button id="btnConfirmSend" style="background:#047857;color:#fff;border:none;padding:11px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.9rem;margin-top:4px;">✅ Enviar E-mail e Concluir</button>
+          <a href="#" id="linkVoltar" style="color:#64748b;font-size:0.8rem;text-align:center;text-decoration:none;margin-top:4px;">⬅ Voltar para opções</a>
+        </div>
+
+        <div id="mainOptions" style="display:flex;flex-direction:column;gap:8px;">
+          <button id="btnOptSend" style="background:#047857;color:#fff;border:none;padding:11px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.9rem;display:flex;justify-content:center;align-items:center;gap:8px;transition:background 0.2s;">
+            📧 Concluir e ENVIAR E-mail
+          </button>
+          <button id="btnOptNoSend" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:11px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.9rem;display:flex;justify-content:center;align-items:center;gap:8px;transition:background 0.2s;">
+            🔇 Concluir SEM E-mail
+          </button>
+          <button id="btnOptCancel" style="background:transparent;color:#ef4444;border:none;padding:10px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.9rem;margin-top:4px;">
+            ❌ Cancelar Ação
+          </button>
+        </div>
+      `;
+      
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      setTimeout(() => {
+        overlay.style.opacity = '1';
+        box.style.transform = 'scale(1)';
+      }, 10);
+
+      const closeDialog = (result) => {
+        overlay.style.opacity = '0';
+        box.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          if(document.body.contains(overlay)) document.body.removeChild(overlay);
+          resolve(result);
+        }, 200);
+      };
+
+      const mainOptions = document.getElementById('mainOptions');
+      const commentBox = document.getElementById('commentBox');
+
+      document.getElementById('btnOptSend').onclick = () => {
+        mainOptions.style.display = 'none';
+        commentBox.style.display = 'flex';
+        document.getElementById('customResolveComment').focus();
+      };
+      
+      document.getElementById('linkVoltar').onclick = (e) => {
+        e.preventDefault();
+        commentBox.style.display = 'none';
+        mainOptions.style.display = 'flex';
+      };
+
+      document.getElementById('btnConfirmSend').onclick = () => {
+        const txt = document.getElementById('customResolveComment').value;
+        closeDialog({ action: 'send', comment: txt });
+      };
+
+      document.getElementById('btnOptNoSend').onclick = () => {
+        closeDialog({ action: 'no_send', comment: '' });
+      };
+
+      document.getElementById('btnOptCancel').onclick = () => closeDialog({ action: 'cancel' });
+    });
+  }
+};
+
+const App = {
+  chamadosAll: [],
+  chamadosFiltered: [],
+  responsaveis: [],
+  categorias: [],
+  autoRefreshTimer: null,
+  draggedCardId: null,
+  deletedIds: new Set(),
+  usuarioLogado: 'Usuário', 
+
+  filters: {
+    text: '',
+    responsavel: '', 
+    setor: '',       
+    categoria: '',
+    prioridade: '',
+    overdueOnly: false
+  },
+
+  async init() {
+    this._setupEventListeners();
+    await this.loadData();
+    this.startRealTimePolling();
+  },
+
+  async loadData(silent = false) {
+    if (this.draggedCardId || document.querySelector('.modal-overlay.active')) {
+      return; 
+    }
+
+    if (!silent) this.setSyncLoading(true);
+    try {
+      const [chamados, responsaveis, categorias, usuario] = await Promise.all([
+        Api.buscarChamados(),
+        Api.buscarResponsaveis(),
+        Api.buscarCategorias(),
+        Api.buscarUsuarioAtual() 
+      ]);
+
+      const fetchedChamados = chamados || [];
+      this.chamadosAll = fetchedChamados.filter(c => c && c.id && !this.deletedIds.has(c.id));
+      
+      this.responsaveis = responsaveis || [];
+      this.categorias = categorias || [];
+      this.usuarioLogado = usuario || 'Usuário';
+
+      ModalManager.init(this.responsaveis, this.categorias, () => this.loadData(true));
+      this.populateFilterDropdowns();
+      this.applyFilters();
+
+      if (!silent) this.showToast('Sincronizado!', 'info');
+    } catch (err) {
+      console.error('Erro ao carregar:', err);
+    } finally {
+      if (!silent) this.setSyncLoading(false);
+    }
+  },
+
+  startRealTimePolling() {
+    setInterval(() => {
+      this.loadData(true);
+    }, 10000); 
+  },
+
+  populateFilterDropdowns() {
+    const filterCat = document.getElementById('filterCategoria');
+    if (filterCat && filterCat.options.length <= 1) {
+      this.categorias.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        filterCat.appendChild(opt);
+      });
+    }
+
+    const filterResp = document.getElementById('filterResponsavel');
+    if (filterResp && filterResp.options.length <= 1) {
+      this.responsaveis.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.nome; 
+        opt.textContent = r.nome;
+        filterResp.appendChild(opt);
+      });
+    }
+
+    const filterSetor = document.getElementById('filterSetor');
+    if (filterSetor) {
+      const valorSelecionado = filterSetor.value; 
+      filterSetor.innerHTML = '<option value="">Todos os Setores</option>';
+      const setoresUnicos = new Set();
+      
+      this.chamadosAll.forEach(c => {
+        if (c && c.solicitante && c.solicitante.setor) {
+          const s = c.solicitante.setor.trim();
+          if (s) setoresUnicos.add(s);
+        }
+      });
+      
+      Array.from(setoresUnicos).sort().forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        if (s === valorSelecionado) opt.selected = true; 
+        filterSetor.appendChild(opt);
+      });
+    }
+  },
+
+  applyFilters() {
+    const textQuery = this.filters.text.toLowerCase().trim();
+
+    this.chamadosFiltered = this.chamadosAll.filter(c => {
+      if (!c || !c.id) return false; 
+        
+      if (textQuery) {
+        const matchId = c.id && c.id.toLowerCase().includes(textQuery);
+        const matchTitulo = c.titulo && c.titulo.toLowerCase().includes(textQuery);
+        let solNome = c.solicitante && c.solicitante.nome ? c.solicitante.nome.toLowerCase() : '';
+        let solEmail = c.solicitante && c.solicitante.email ? c.solicitante.email.toLowerCase() : '';
+        const matchSolicitante = solNome.includes(textQuery) || solEmail.includes(textQuery);
+        let respNome = c.responsavel && c.responsavel.nome ? c.responsavel.nome.toLowerCase() : '';
+        const matchResp = respNome.includes(textQuery);
+        
+        if (!matchId && !matchTitulo && !matchSolicitante && !matchResp) return false;
+      }
+
+      if (this.filters.responsavel) {
+        let respName = c.responsavel && c.responsavel.nome ? c.responsavel.nome : '';
+        if (respName !== this.filters.responsavel) return false;
+      }
+
+      if (this.filters.setor) {
+        let setorName = c.solicitante && c.solicitante.setor ? c.solicitante.setor : '';
+        if (setorName !== this.filters.setor) return false;
+      }
+      
+      if (this.filters.categoria) {
+        if (this.filters.categoria === 'Outros') {
+          if (this.categorias.includes(c.categoria) && c.categoria !== 'Outros') return false;
+        } else {
+          if (c.categoria !== this.filters.categoria) return false;
+        }
+      }
+
+      if (this.filters.prioridade && (c.prioridade || '').toLowerCase() !== this.filters.prioridade.toLowerCase()) return false;
+      if (this.filters.overdueOnly && !Utils.isOverdue(c.dataPrevisao, c.status)) return false;
+      
+      return true;
+    });
+
+    this.renderKanban();
+    this.updateStatsCounters();
+  },
+
+  renderKanban() {
+    const columns = ['NOVO', 'EM ATENDIMENTO', 'AGUARDANDO RETORNO', 'PROJETO', 'RESOLVIDO', 'CANCELADO'];
+    
+    columns.forEach(status => {
+      const colId = 'col-' + status.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-');
+      const columnBody = document.querySelector(`#${colId} .kanban-column-body`);
+      const countBadge = document.querySelector(`#${colId} .column-count`);
+
+      if (!columnBody) return;
+
+      const chamadosColuna = this.chamadosFiltered.filter(c => c.status === status);
+      
+      chamadosColuna.sort((a, b) => {
+        let numA = parseInt(String(a.id).replace(/\D/g, ''), 10);
+        let numB = parseInt(String(b.id).replace(/\D/g, ''), 10);
+        if(isNaN(numA)) numA = 0;
+        if(isNaN(numB)) numB = 0;
+        return numA - numB;
+      });
+
+      if (countBadge) countBadge.textContent = chamadosColuna.length;
+
+      if (chamadosColuna.length === 0) {
+        columnBody.innerHTML = `<div class="empty-column-placeholder"><span>Nenhum chamado</span></div>`;
+      } else {
+        columnBody.innerHTML = chamadosColuna.map(c => this._buildCardHTML(c)).join('');
+      }
+
+      columnBody.querySelectorAll('.kanban-card').forEach(cardEl => {
+        const id = cardEl.getAttribute('data-id');
+        cardEl.addEventListener('click', (e) => {
+          if (e.target.closest('.no-modal')) return;
+          const obj = this.chamadosAll.find(c => c && c.id === id);
+          if (obj) ModalManager.openDetalhesModal(obj);
+        });
+        cardEl.addEventListener('dragstart', (e) => this._onDragStart(e, id));
+        cardEl.addEventListener('dragend', (e) => this._onDragEnd(e));
+      });
+    });
+  },
+
+  _buildCardHTML(c) {
+    if (!c) return '';
+    const priorityClass = Utils.getPriorityClass(c.prioridade);
+    const categoryIcon = Utils.getCategoryIcon(c.categoria);
+    const isVencido = Utils.isOverdue(c.dataPrevisao, c.status);
+    const responsavelNome = c.responsavel ? c.responsavel.nome : 'Não atribuído';
+    let solNome = c.solicitante && c.solicitante.nome ? c.solicitante.nome : '';
+
+    return `
+      <div class="kanban-card ${priorityClass} ${isVencido ? 'card-vencido' : ''}" draggable="true" data-id="${c.id}">
+        <div class="card-header">
+          <span class="card-id">${Utils.escapeHtml(c.id)}</span>
+          <div class="card-badges">
+            <span class="badge badge-category">${categoryIcon} ${Utils.escapeHtml(c.categoria || 'Outros')}</span>
+            <span class="badge badge-priority badge-${(c.prioridade || 'baixa').toLowerCase()}">${c.prioridade || 'Baixa'}</span>
+          </div>
+        </div>
+        <h4 class="card-title">${Utils.escapeHtml(c.titulo)}</h4>
+        <div class="card-meta">
+          <div class="meta-item"><span class="meta-icon">👤</span><span class="meta-text">${Utils.escapeHtml(solNome)}</span></div>
+          <div class="meta-item"><span class="meta-icon">🛠️</span><span class="meta-text ${!c.responsavel ? 'unassigned' : ''}">${Utils.escapeHtml(responsavelNome)}</span></div>
+        </div>
+        <div class="card-footer">
+          <div class="card-date"><span>🕒 ${Utils.getRelativeTime(c.dataCriacao)}</span></div>
+          ${isVencido ? `<div class="badge-overdue">⚠️ Vencido</div>` : c.dataPrevisao ? `<div class="card-due">📅 ${Utils.formatDate(c.dataPrevisao)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  },
+
+  updateStatsCounters() {
+    document.getElementById('statTotal').textContent = this.chamadosAll.length;
+    document.getElementById('statExibidos').textContent = this.chamadosFiltered.length;
+    const countVencidos = this.chamadosAll.filter(c => c && Utils.isOverdue(c.dataPrevisao, c.status)).length;
+    const vencidosEl = document.getElementById('statVencidos');
+    vencidosEl.textContent = countVencidos;
+    vencidosEl.classList.toggle('has-overdue', countVencidos > 0);
+  },
+
+  _onDragStart(e, id) {
+    this.draggedCardId = id;
+    e.target.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  },
+  _onDragEnd(e) {
+    e.target.classList.remove('dragging');
+    this.draggedCardId = null;
+    document.querySelectorAll('.kanban-column-body').forEach(col => col.classList.remove('drag-over'));
+  },
+
+  _setupDragAndDropZones() {
+    const container = document.querySelector('.kanban-container');
+
+    container.addEventListener('dragover', (e) => {
+      const edgeThreshold = 100; 
+      const scrollSpeed = 15;    
+      const rect = container.getBoundingClientRect();
+      if (e.clientX >= rect.right - edgeThreshold) container.scrollLeft += scrollSpeed;
+      else if (e.clientX <= rect.left + edgeThreshold) container.scrollLeft -= scrollSpeed;
+    });
+
+    document.querySelectorAll('.kanban-column-body').forEach(colBody => {
+      colBody.addEventListener('dragover', (e) => { e.preventDefault(); colBody.classList.add('drag-over'); });
+      colBody.addEventListener('dragleave', (e) => { if (!colBody.contains(e.relatedTarget)) colBody.classList.remove('drag-over'); });
+      colBody.addEventListener('drop', (e) => {
+        e.preventDefault();
+        colBody.classList.remove('drag-over');
+        const cardId = e.dataTransfer.getData('text/plain') || this.draggedCardId;
+        const targetColumn = colBody.closest('.kanban-column');
+        if (cardId && targetColumn) this.handleMoveCard(cardId, targetColumn.getAttribute('data-status'));
+      });
+    });
+  },
+
+  async handleMoveCard(cardId, newStatus) {
+    const chamado = this.chamadosAll.find(c => c && c.id === cardId);
+    if (!chamado || chamado.status === newStatus) return; 
+
+    if (newStatus === 'RESOLVIDO' && chamado.status !== 'RESOLVIDO') {
+      const resposta = await window.CustomDialogs.showResolveOptions(chamado.id);
+      
+      if (resposta.action === 'cancel') {
+        this.renderKanban(); 
+        return; 
+      }
+      
+      if (resposta.action === 'send') {
+        chamado.notificarResolucao = true; 
+        chamado.comentarioResolucao = resposta.comment || '';
+      } else if (resposta.action === 'no_send') {
+        chamado.notificarResolucao = false; 
+        chamado.comentarioResolucao = '';
+      }
+    } 
+    else if (chamado.status === 'RESOLVIDO' || chamado.status === 'CANCELADO') {
+      if (!confirm(`Deseja reabrir este chamado e mudar para ${newStatus}?`)) {
+        this.renderKanban();
+        return;
+      }
+      chamado.notificarResolucao = false; 
+    } 
+    else {
+      chamado.notificarResolucao = false;
+    }
+
+    const prevStatus = chamado.status;
+    chamado.status = newStatus;
+    chamado.dataAtualizacao = new Date().toISOString();
+
+    if (!chamado.historico) chamado.historico = [];
+    
+    let msgLog = `Movido para ${newStatus}`;
+    if (newStatus === 'RESOLVIDO' && chamado.comentarioResolucao) {
+       msgLog += ` (Comentário: ${chamado.comentarioResolucao})`;
+    }
+    
+    chamado.historico.push({ data: chamado.dataAtualizacao, acao: msgLog, usuario: this.usuarioLogado });
+
+    this.applyFilters();
+
+    try { 
+      await Api.salvarChamado(chamado); 
+    } catch (err) {
+      console.error("Erro interno ao arrastar card:", err);
+      chamado.status = prevStatus; 
+      this.applyFilters();
+      this.showToast('Erro ao atualizar: ' + (err.message || err), 'error');
+    }
+  },
+
+  _setupEventListeners() {
+    document.getElementById('searchInput').addEventListener('input', Utils.debounce((e) => {
+      this.filters.text = e.target.value; this.applyFilters();
+    }, 300));
+    
+    document.getElementById('filterResponsavel').addEventListener('change', (e) => { this.filters.responsavel = e.target.value; this.applyFilters(); });
+    document.getElementById('filterSetor').addEventListener('change', (e) => { this.filters.setor = e.target.value; this.applyFilters(); });
+    document.getElementById('filterCategoria').addEventListener('change', (e) => { this.filters.categoria = e.target.value; this.applyFilters(); });
+    document.getElementById('filterPrioridade').addEventListener('change', (e) => { this.filters.prioridade = e.target.value; this.applyFilters(); });
+    
+    const btnVencidos = document.getElementById('btnFilterOverdue');
+    btnVencidos.addEventListener('click', () => {
+      this.filters.overdueOnly = !this.filters.overdueOnly;
+      btnVencidos.classList.toggle('active', this.filters.overdueOnly);
+      this.applyFilters();
+    });
+
+    document.getElementById('btnClearFilters').addEventListener('click', () => {
+      this.filters = { text: '', responsavel: '', setor: '', categoria: '', prioridade: '', overdueOnly: false };
+      document.getElementById('searchInput').value = '';
+      document.getElementById('filterResponsavel').value = ''; 
+      document.getElementById('filterSetor').value = ''; 
+      document.getElementById('filterCategoria').value = '';
+      document.getElementById('filterPrioridade').value = '';
+      btnVencidos.classList.remove('active');
+      this.applyFilters();
+    });
+
+    document.querySelectorAll('.column-header').forEach(header => {
+      header.title = "Clique para recolher/expandir esta coluna";
+      header.addEventListener('click', () => {
+        header.closest('.kanban-column').classList.toggle('collapsed');
+      });
+    });
+
+    document.getElementById('btnRefresh').addEventListener('click', () => this.loadData(false));
+    this._setupDragAndDropZones();
+  },
+
+  setSyncLoading(isLoading) {
+    const btn = document.getElementById('btnRefresh');
+    if (btn) {
+      btn.disabled = isLoading;
+      isLoading ? btn.classList.add('spinning') : btn.classList.remove('spinning');
+    }
+  },
+
+  showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    let icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+    toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>

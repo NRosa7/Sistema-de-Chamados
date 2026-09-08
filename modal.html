@@ -1,0 +1,272 @@
+<script>
+const ModalManager = {
+  activeChamado: null,
+  responsaveisList: [],
+  categoriasList: [],
+  onSaveCallback: null,
+  eventsBound: false, 
+
+  init(responsaveis, categorias, onSaveCallback) {
+    this.responsaveisList = responsaveis || [];
+    this.categoriasList = categorias || [];
+    this.onSaveCallback = onSaveCallback;
+    this._bindEvents();
+  },
+
+  _bindEvents() {
+    if (this.eventsBound) return;
+    this.eventsBound = true;
+
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) this.closeAllModals();
+      });
+    });
+
+    document.querySelectorAll('.modal-close-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.closeAllModals());
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.closeAllModals();
+    });
+
+    const btnSalvarDetalhes = document.getElementById('btnSalvarDetalhes');
+    if (btnSalvarDetalhes) {
+      btnSalvarDetalhes.addEventListener('click', () => this._handleSalvarDetalhes());
+    }
+
+    const btnExcluirDetalhes = document.getElementById('btnExcluirChamado');
+    if (btnExcluirDetalhes) {
+      btnExcluirDetalhes.addEventListener('click', () => this._handleExcluirChamado());
+    }
+  },
+
+  closeAllModals() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+    this.activeChamado = null;
+  },
+
+  openDetalhesModal(chamado) {
+    this.activeChamado = JSON.parse(JSON.stringify(chamado));
+    const c = this.activeChamado;
+    const modal = document.getElementById('modalDetalhesChamado');
+    if (!modal) return;
+
+    document.getElementById('modalIdTag').textContent = c.id;
+    document.getElementById('modalIdTitle').textContent = c.titulo;
+    
+    const statusBadge = document.getElementById('modalStatusBadge');
+    statusBadge.textContent = c.status;
+    statusBadge.className = `status-pill status-${c.status.toLowerCase().replace(/\s+/g, '-')}`;
+
+    document.getElementById('editTitulo').value = c.titulo || '';
+    document.getElementById('editDescricao').value = c.descricao || '';
+    
+    let solNome = c.solicitante && c.solicitante.nome ? c.solicitante.nome : '';
+    let solEmail = c.solicitante && c.solicitante.email ? c.solicitante.email : '';
+    let solSetor = c.solicitante && c.solicitante.setor ? c.solicitante.setor : '';
+    
+    document.getElementById('editSolicitanteNome').value = solNome;
+    document.getElementById('editSolicitanteEmail').value = solEmail;
+    document.getElementById('editSolicitanteSetor').value = solSetor;
+    
+    document.getElementById('editPrioridade').value = c.prioridade || 'Média';
+    document.getElementById('editStatus').value = c.status || 'NOVO';
+    document.getElementById('editPrevisao').value = Utils.toInputDateValue(c.dataPrevisao);
+    document.getElementById('editObservacoes').value = c.observacoes || '';
+
+    document.getElementById('modalDataCriacao').textContent = Utils.formatDateTime(c.dataCriacao);
+    document.getElementById('modalDataAtualizacao').textContent = Utils.formatDateTime(c.dataAtualizacao);
+
+    const catSelect = document.getElementById('editCategoria');
+    catSelect.innerHTML = '';
+    
+    let achouCatOficial = false;
+
+    this.categoriasList.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      if (cat === c.categoria) {
+        opt.selected = true;
+        achouCatOficial = true;
+      }
+      catSelect.appendChild(opt);
+    });
+
+    if (!achouCatOficial && c.categoria) {
+      const optExtra = document.createElement('option');
+      optExtra.value = c.categoria;
+      optExtra.textContent = `${c.categoria} (Personalizado)`;
+      optExtra.selected = true;
+      catSelect.appendChild(optExtra);
+    }
+
+    const respSelect = document.getElementById('editResponsavel');
+    respSelect.innerHTML = '<option value="">-- Não Atribuído --</option>';
+    this.responsaveisList.forEach(resp => {
+      const opt = document.createElement('option');
+      opt.value = resp.email;
+      opt.textContent = `${resp.nome} (${resp.email})`;
+      if (c.responsavel && c.responsavel.email === resp.email) {
+        opt.selected = true;
+      }
+      respSelect.appendChild(opt);
+    });
+
+    this._renderHistoricoTimeline(c.historico || []);
+    modal.classList.add('active');
+  },
+
+  _renderHistoricoTimeline(historicoList) {
+    const container = document.getElementById('modalHistoricoList');
+    if (!container) return;
+    if (!historicoList || historicoList.length === 0) {
+      container.innerHTML = '<p class="text-muted">Nenhum histórico registrado.</p>';
+      return;
+    }
+    container.innerHTML = historicoList.map(item => `
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div class="timeline-content">
+          <div class="timeline-header">
+            <span class="timeline-user">${Utils.escapeHtml(item.usuario || 'Sistema')}</span>
+            <span class="timeline-date">${Utils.formatDateTime(item.data)}</span>
+          </div>
+          <p class="timeline-action">${Utils.escapeHtml(item.acao)}</p>
+        </div>
+      </div>
+    `).reverse().join('');
+  },
+
+  async _handleSalvarDetalhes() {
+    if (!this.activeChamado) return;
+    const btn = document.getElementById('btnSalvarDetalhes');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    try {
+      const c = this.activeChamado;
+      const prevStatus = c.status;
+      const selectedStatus = document.getElementById('editStatus').value; 
+      
+      if (selectedStatus === 'RESOLVIDO' && prevStatus !== 'RESOLVIDO') {
+        const resposta = await window.CustomDialogs.showResolveOptions(c.id);
+        
+        if (resposta.action === 'cancel') {
+          btn.disabled = false;
+          btn.textContent = originalText;
+          document.getElementById('editStatus').value = prevStatus; 
+          return; 
+        }
+        
+        if (resposta.action === 'send') {
+          c.notificarResolucao = true; 
+          c.comentarioResolucao = resposta.comment || '';
+        } else if (resposta.action === 'no_send') {
+          c.notificarResolucao = false;
+          c.comentarioResolucao = '';
+        }
+      } else {
+        c.notificarResolucao = false;
+      }
+
+      c.status = selectedStatus;
+      
+      let prevResponsavel = c.responsavel && c.responsavel.email ? c.responsavel.email : null;
+
+      c.titulo = document.getElementById('editTitulo').value.trim();
+      c.descricao = document.getElementById('editDescricao').value.trim();
+      c.prioridade = document.getElementById('editPrioridade').value;
+      c.categoria = document.getElementById('editCategoria').value;
+      c.dataPrevisao = document.getElementById('editPrevisao').value;
+      c.observacoes = document.getElementById('editObservacoes').value.trim();
+
+      const respEmail = document.getElementById('editResponsavel').value;
+      if (respEmail) {
+        const respObj = this.responsaveisList.find(r => r.email === respEmail);
+        c.responsavel = respObj ? respObj : { nome: respEmail, email: respEmail };
+      } else {
+        c.responsavel = null;
+      }
+
+      const alteracoes = [];
+      if (prevStatus !== c.status) alteracoes.push(`Status alterado de "${prevStatus}" para "${c.status}"`);
+      
+      let newRespEmail = c.responsavel && c.responsavel.email ? c.responsavel.email : '';
+      if (prevResponsavel !== newRespEmail) {
+        let respNomeMsg = c.responsavel && c.responsavel.nome ? c.responsavel.nome : 'Não Atribuído';
+        alteracoes.push(`Responsável alterado para: ${respNomeMsg}`);
+      }
+
+      if (alteracoes.length > 0 || c.observacoes) {
+        let msgAcao = alteracoes.length > 0 ? alteracoes.join('; ') : 'Chamado atualizado';
+        
+        if (c.status === 'RESOLVIDO' && c.comentarioResolucao) {
+          msgAcao += ` (Comentário: ${c.comentarioResolucao})`;
+        }
+        
+        c.historico.push({
+          data: new Date().toISOString(),
+          acao: msgAcao,
+          usuario: App.usuarioLogado 
+        });
+      }
+
+      await Api.salvarChamado(c);
+      
+      const idx = App.chamadosAll.findIndex(item => item && item.id === c.id);
+      if (idx !== -1) App.chamadosAll[idx] = c;
+      
+      App.applyFilters();
+      App.showToast('Chamado atualizado com sucesso!', 'success');
+      this.closeAllModals();
+
+    } catch (err) {
+      console.error('Erro ao salvar chamado:', err);
+      App.showToast('Erro ao salvar alterações.', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+  },
+
+  async _handleExcluirChamado() {
+    if (!this.activeChamado || !this.activeChamado.id) return;
+    
+    const idParaExcluir = this.activeChamado.id;
+    const confirmou = confirm(`ATENÇÃO!\nTem certeza que deseja excluir permanentemente o chamado ${idParaExcluir} da planilha?\nEsta ação NÃO pode ser desfeita.`);
+    if (!confirmou) return;
+
+    const btn = document.getElementById('btnExcluirChamado');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Excluindo...';
+
+    try {
+      const res = await Api.excluirChamado(idParaExcluir);
+      if (res && res.success === false) throw new Error(res.msg);
+
+      App.deletedIds.add(idParaExcluir); 
+      App.chamadosAll = App.chamadosAll.filter(c => c && c.id !== idParaExcluir);
+      App.applyFilters();
+
+      App.showToast(`Chamado ${idParaExcluir} excluído com sucesso!`, 'success');
+      this.closeAllModals();
+
+    } catch (err) {
+      console.error('Erro ao excluir chamado:', err);
+      App.showToast('Erro ao excluir do banco de dados.', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+  }
+};
+</script>

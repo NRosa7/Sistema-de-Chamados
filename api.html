@@ -1,0 +1,75 @@
+<script>
+const Api = {
+  isGoogleAppsScript() {
+    return typeof google !== 'undefined' && google.script && typeof google.script.run === 'object';
+  },
+  
+  buscarUsuarioAtual() {
+    return new Promise((resolve) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(() => resolve('Usuário'))
+          .getUsuarioAtual();
+      } else { resolve('admin@local'); }
+    });
+  },
+
+  buscarChamados() {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(data => {
+            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+            resolve(parsed || []);
+          })
+          .withFailureHandler(err => reject(err))
+          .getTodosChamados();
+      } else { resolve([]); }
+    });
+  },
+  salvarChamado(chamadoAtualizado) {
+    return new Promise((resolve, reject) => {
+      chamadoAtualizado.dataAtualizacao = new Date().toISOString();
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .atualizarChamado(chamadoAtualizado);
+      } else { resolve({ success: true }); }
+    });
+  },
+  buscarResponsaveis() {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .getResponsaveis();
+      } else { resolve([]); }
+    });
+  },
+  buscarCategorias() {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .getCategorias();
+      } else { resolve([]); }
+    });
+  },
+  excluirChamado(id) {
+    return new Promise((resolve, reject) => {
+      if (this.isGoogleAppsScript()) {
+        google.script.run
+          .withSuccessHandler(res => resolve(res))
+          .withFailureHandler(err => reject(err))
+          .excluirChamado(id);
+      } else {
+        resolve({ success: true });
+      }
+    });
+  }
+};
+</script>
